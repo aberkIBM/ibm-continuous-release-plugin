@@ -34,12 +34,12 @@ import com.cloudbees.hudson.plugins.folder.Folder;
 
 @Extension
 public class CloudItemListener extends ItemListener {
-	public static final Logger log = LoggerFactory.getLogger(CloudItemListener.class);
-	private String logPrefix= "[IBM Cloud DevOps] CloudItemListener#";
+    public static final Logger log = LoggerFactory.getLogger(CloudItemListener.class);
+    private String logPrefix= "[IBM Cloud DevOps] CloudItemListener#";
 
     public CloudItemListener(){
-    	logPrefix= logPrefix + "CloudItemListener ";
-    	log.info(logPrefix + "CloudItemListener started...");
+        logPrefix= logPrefix + "CloudItemListener ";
+        log.info(logPrefix + "CloudItemListener started...");
     }
 
     @Override
@@ -59,32 +59,33 @@ public class CloudItemListener extends ItemListener {
 
     private void handleEvent(Item item, String phase) {
         CloudSocketComponent socket = new ConnectComputerListener().getCloudSocketInstance();
-        if(socket.connected()) {
+        // TODO: Update with OnPrem check
+        // if(socket.connected()) {
             if( !(item instanceof Folder) ) {
                 JenkinsJob jenkinsJob= new JenkinsJob(item);
                 log.info(ToStringBuilder.reflectionToString(jenkinsJob.toJson()) + " was " + phase);
                 CloudPublisher cloudPublisher = new CloudPublisher();
                 cloudPublisher.uploadJobInfo(jenkinsJob.toJson());
             }
-        }
+        // }
 
-    	// we'll handle the updates to the sync app here
+        // we'll handle the updates to the sync app here
     }
 
     public List<JSONObject> buildJobsList() {
-    	log.info(logPrefix + "Building the list of Jenkins jobs...");
-    	List<Item> allProjects= JenkinsServer.getAllItems();
-    	List<JSONObject> allJobs = new ArrayList<JSONObject>();
+        log.info(logPrefix + "\n\n\tBuilding the list of Jenkins jobs...\n\n");
+        List<Item> allProjects= JenkinsServer.getAllItems();
+        List<JSONObject> allJobs = new ArrayList<JSONObject>();
 
         CloudPublisher cloudPublisher = new CloudPublisher();
-    	for (Item anItem : allProjects) {
+        for (Item anItem : allProjects) {
             if( !(anItem instanceof Folder) ) {
                 JenkinsJob jenkinsJob= new JenkinsJob(anItem);
                 allJobs.add(jenkinsJob.toJson());
 
                 cloudPublisher.uploadJobInfo(jenkinsJob.toJson());
             }
-		}
-    	return allJobs;
+        }
+        return allJobs;
     }
 }

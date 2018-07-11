@@ -1,4 +1,4 @@
-package com.ibm.devops.connect.SecuredAction;
+package com.ibm.devops.connect.SecuredActions;
 
 import com.ibm.devops.connect.CloudItemListener;
 import jenkins.model.Jenkins;

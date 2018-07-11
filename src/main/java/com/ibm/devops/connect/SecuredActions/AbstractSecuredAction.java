@@ -1,4 +1,4 @@
-package com.ibm.devops.connect.SecuredAction;
+package com.ibm.devops.connect.SecuredActions;
 
 import org.acegisecurity.context.SecurityContextHolder;
 import org.acegisecurity.providers.UsernamePasswordAuthenticationToken;

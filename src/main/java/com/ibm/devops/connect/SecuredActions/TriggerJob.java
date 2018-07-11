@@ -1,6 +1,6 @@
-package com.ibm.devops.connect.SecuredAction;
+package com.ibm.devops.connect.SecuredActions;
 
-import com.ibm.devops.connect.CloudWorkListener;
+import com.ibm.devops.connect.CloudWorkListener2;
 import jenkins.model.Jenkins;
 import hudson.model.AbstractItem;
 
@@ -14,7 +14,7 @@ public class TriggerJob extends AbstractSecuredAction {
     protected void run(AbstractSecuredAction.ParamObj paramObj) {
         TriggerJobParamObj triggerJobParamObj = (TriggerJobParamObj)paramObj;
 
-        CloudWorkListener cwl = new CloudWorkListener();
+        CloudWorkListener2 cwl = new CloudWorkListener2();
         cwl.callSecured(triggerJobParamObj.socket, triggerJobParamObj.event, triggerJobParamObj.args);
     }
 

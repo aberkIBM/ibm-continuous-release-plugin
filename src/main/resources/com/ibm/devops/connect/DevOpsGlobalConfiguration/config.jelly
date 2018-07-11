@@ -26,18 +26,21 @@
       tags they use. Views are always organized according to its owner class,
       so it should be straightforward to find them.
     -->
-    <f:section title="IBM Continuous Release">
-        <f:entry title="Sync ID" field="syncId">
+    <f:section title="UrbanCode Velocity">
+        <f:entry title="Integration ID" field="syncId">
             <f:textbox />
         </f:entry>
-        <f:entry title="Sync Token" field="syncToken">
+        <f:entry title="Integration Token" field="syncToken">
             <f:password />
+        </f:entry>
+        <f:entry title="Velocity Base URL" field="baseUrl">
+            <f:textbox />
         </f:entry>
         <f:entry title="">
             <div style="text-align: right">
             <f:validateButton
                 title="${%Test Connection}" progress="${%Testing...}"
-                method="testConnection" with="url,token"/>
+                method="testConnection" with="syncId,syncToken,baseUrl"/>
             </div>
         </f:entry>
 

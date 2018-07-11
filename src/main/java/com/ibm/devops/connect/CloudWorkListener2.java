@@ -63,17 +63,21 @@ import com.ibm.devops.connect.SecuredActions.TriggerJob;
 
 import com.ibm.devops.connect.Status.JenkinsJobStatus;
 
+import java.security.MessageDigest;
+import javax.crypto.spec.SecretKeySpec;
+import javax.crypto.Cipher;
+
 /*
  * When Spring is applying the @Transactional annotation, it creates a proxy class which wraps your class.
  * So when your bean is created in your application context, you are getting an object that is not of type
  * WorkListener but some proxy class that implements the IWorkListener interface. So anywhere you want WorkListener
  * injected, you must use IWorkListener.
  */
-public class CloudWorkListener implements IWorkListener {
-	public static final Logger log = LoggerFactory.getLogger(CloudWorkListener.class);
-    private String logPrefix= "[IBM Cloud DevOps] CloudWorkListener#";
+public class CloudWorkListener2 {
+	public static final Logger log = LoggerFactory.getLogger(CloudWorkListener2.class);
+    private String logPrefix= "[IBM Cloud DevOps] CloudWorkListener2#";
 
-    public CloudWorkListener() {
+    public CloudWorkListener2() {
 
     }
 
@@ -84,28 +88,57 @@ public class CloudWorkListener implements IWorkListener {
     /* (non-Javadoc)
      * @see com.ibm.cloud.urbancode.sync.IWorkListener#call(com.ibm.cloud.urbancode.connect.client.ConnectSocket, java.lang.String, java.lang.Object)
      */
-    @Override
-    public void call(ConnectSocket socket, String event, Object... args) {
+    public void call(String event, Object... args) {
         TriggerJob triggerJob = new TriggerJob();
 
-        TriggerJobParamObj paramObj = triggerJob.new TriggerJobParamObj(socket, event, args);
+        TriggerJobParamObj paramObj = triggerJob.new TriggerJobParamObj(null, event, args);
         triggerJob.runAsJenkinsUser(paramObj);
+    }
+    private static byte[] toByte(String hexString) {
+        int len = hexString.length()/2;
+        byte[] result = new byte[len];
+        for (int i = 0; i < len; i++) {
+            result[i] = Integer.valueOf(hexString.substring(2*i, 2*i+2), 16).byteValue();
+        }
+        return result;
+    }
+
+    private static String decrypt(String seed, String encrypted) throws Exception {
+        byte[] keyb = seed.getBytes("UTF-8");
+        MessageDigest md = MessageDigest.getInstance("MD5");
+        byte[] thedigest = md.digest(keyb);
+        SecretKeySpec skey = new SecretKeySpec(thedigest, "AES");
+        Cipher dcipher = Cipher.getInstance("AES");
+        dcipher.init(Cipher.DECRYPT_MODE, skey);
+
+        byte[] clearbyte = dcipher.doFinal(toByte(encrypted));
+        return new String(clearbyte);
     }
 
     public void callSecured(ConnectSocket socket, String event, Object... args) {
         log.info(logPrefix + " Received event from Connect Socket");
 
-        JSONArray incomingJobs = JSONArray.fromObject(args[0].toString());
+        String payload = args[0].toString();
+        String token = Jenkins.getInstance().getDescriptorByType(DevOpsGlobalConfiguration.class).getSyncToken();
+
+        try {
+            payload = decrypt(token, payload);
+        } catch (Exception e) {
+            //TODO handle decryption error
+            System.out.println("Unable to decrypt");
+        }
+
+        //TODO Don't make this an array in the silly way that I have.  I just want this to work
+        JSONArray incomingJobs = JSONArray.fromObject("[" + payload + "]");
 
         for(int i=0; i < incomingJobs.size(); i++) {
             JSONObject incomingJob = incomingJobs.getJSONObject(i);
             // sample job creation request from a toolchain
             if (incomingJob.has("jobType") && "new".equalsIgnoreCase(incomingJob.get("jobType").toString())) {
-            	log.info(logPrefix + "Job creation request received.");
-            	// delegating job creation to the Jenkins server
-            	JenkinsServer.createJob(incomingJob);
-        	}
-
+                log.info(logPrefix + "Job creation request received.");
+                // delegating job creation to the Jenkins server
+                JenkinsServer.createJob(incomingJob);
+            }
 
             if (incomingJob.has("fullName")) {
                 String fullName = incomingJob.get("fullName").toString();
@@ -150,6 +183,7 @@ public class CloudWorkListener implements IWorkListener {
                     }
                 } else if (item instanceof WorkflowJob) {
                     WorkflowJob workflowJob = (WorkflowJob)item;
+
                     QueueTaskFuture queuedTask = workflowJob.scheduleBuild2(0, new ParametersAction(parametersList), new CauseAction(cloudCause));
 
                     if (queuedTask == null) {
@@ -172,22 +206,9 @@ public class CloudWorkListener implements IWorkListener {
 
             }
 
-            sendResult(socket, incomingJobs.getJSONObject(i).get("id").toString(), WorkStatus.started, "This work has been started");
+            //sendResult(socket, incomingJobs.getJSONObject(i).get("id").toString(), WorkStatus.started, "This work has been started");
         }
 
-    }
-
-    private void sendResult(ConnectSocket socket, String id, WorkStatus status, String comment) {
-        JSONObject json = new JSONObject();
-        try {
-            json.put("id", id);
-            json.put("status", status.name());
-            json.put("description", comment);
-        }
-        catch (JSONException e) {
-            throw new RuntimeException("Error constructing work result JSON", e);
-        }
-        socket.emit("set_work_status", json.toString());
     }
 
     private List<ParameterValue> generateParamList (JSONObject incomingJob, Map<String, String> typeMap) {
@@ -235,25 +256,25 @@ public class CloudWorkListener implements IWorkListener {
         if(item instanceof WorkflowJob) {
             List<JobProperty<? super WorkflowJob>> properties = ((WorkflowJob)item).getAllProperties();
 
-			for(JobProperty property : properties) {
-				if (property instanceof ParametersDefinitionProperty) {
-					List<ParameterDefinition> paraDefs = ((ParametersDefinitionProperty)property).getParameterDefinitions();
-					for (ParameterDefinition paramDef : paraDefs) {
+            for(JobProperty property : properties) {
+                if (property instanceof ParametersDefinitionProperty) {
+                    List<ParameterDefinition> paraDefs = ((ParametersDefinitionProperty)property).getParameterDefinitions();
+                    for (ParameterDefinition paramDef : paraDefs) {
                         result.put(paramDef.getName(), paramDef.getType());
-					}
-				}
-			}
+                    }
+                }
+            }
         } else if(item instanceof AbstractItem) {
             List<Action> actions = ((AbstractItem)item).getActions();
 
-			for(Action action : actions) {
-				if (action instanceof ParametersDefinitionProperty) {
-					List<ParameterDefinition> paraDefs = ((ParametersDefinitionProperty)action).getParameterDefinitions();
-					for (ParameterDefinition paramDef : paraDefs) {
+            for(Action action : actions) {
+                if (action instanceof ParametersDefinitionProperty) {
+                    List<ParameterDefinition> paraDefs = ((ParametersDefinitionProperty)action).getParameterDefinitions();
+                    for (ParameterDefinition paramDef : paraDefs) {
                         result.put(paramDef.getName(), paramDef.getType());
-					}
-				}
-			}
+                    }
+                }
+            }
         }
 
         return result;

@@ -81,7 +81,7 @@ public class CloudGraphListener implements GraphListener {
 
         if(isStartNode || isEndNode || isPauseNode) {
             JenkinsPipelineStatus status = new JenkinsPipelineStatus(workflowRun, cloudCause, node, null, isStartNode, isPauseNode);
-            JSONObject statusUpdate = status.generate();
+            JSONObject statusUpdate = status.generate(false);
             CloudPublisher cloudPublisher = new CloudPublisher();
             cloudPublisher.uploadJobStatus(statusUpdate);
         }

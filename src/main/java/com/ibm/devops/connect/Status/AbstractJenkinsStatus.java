@@ -32,10 +32,13 @@ import net.sf.json.JSONObject;
 
 import java.io.IOException;
 import java.lang.InterruptedException;
+import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
-abstract class AbstractJenkinsStatus {
+public abstract class AbstractJenkinsStatus {
     public static final Logger log = LoggerFactory.getLogger(AbstractJenkinsStatus.class);
     // Run
     protected Run run;
@@ -58,24 +61,38 @@ abstract class AbstractJenkinsStatus {
 
     protected void getOrCreateCrAction() {
         // Get CrAction
-        List<Action> actions = run.getActions();
-        for(Action action : actions) {
-            if (action instanceof CrAction) {
-                crAction = (CrAction)action;
+        if ( run != null) {
+            List<Action> actions = run.getActions();
+            for(Action action : actions) {
+                if (action instanceof CrAction) {
+                    crAction = (CrAction)action;
+                }
             }
-        }
 
-        // If not, create crAction
-        if (crAction == null) {
-            crAction = new CrAction();
-            run.addAction(crAction);
+            // If not, create crAction
+            if (crAction == null) {
+                crAction = new CrAction();
+                run.addAction(crAction);
+            }
         }
     }
 
     protected void getEnvVars() {
         try {
-            if(run != null && taskListener != null) {
+            if( run != null && taskListener != null) {
                 this.envVars = run.getEnvironment(taskListener);
+                Set<String> keys = this.envVars.keySet();
+                List<String> keysToRemove = new ArrayList<String>();
+                Iterator<String> iterator = keys.iterator();
+                while (iterator.hasNext()) {
+                    String key = iterator.next();
+                    if (key.contains(".")) {
+                        keysToRemove.add(key);
+                    }
+                }
+                for (String key : keysToRemove) {
+                    this.envVars.remove(key);
+                }
             }
         } catch (IOException ioEx) {
             log.warn("IOException thrown while trying to retrieve EnvVars in constructor: " + ioEx);
@@ -212,7 +229,7 @@ abstract class AbstractJenkinsStatus {
         }
     }
 
-    public JSONObject generate() {
+    public JSONObject generate(boolean completed) {
         JSONObject result = new JSONObject();
 
         evaluateSourceData();
@@ -225,20 +242,16 @@ abstract class AbstractJenkinsStatus {
             evaluateBuildStep();
         }
 
+        String status = null;
         if (run.getResult() == null) {
-            if(run.isBuilding()) {
-                result.put("status", JobStatus.started.toString());
-            } else {
-                result.put("status", JobStatus.unstarted.toString());
-            }
-        } else {
-            if(run.getResult() == Result.SUCCESS) {
-                result.put("status", JobStatus.success.toString());
-            } else {
-                result.put("status", JobStatus.failure.toString());
-            }
+            status = run.isBuilding() ? JobStatus.started.toString() : JobStatus.unstarted.toString();
+        } else if (run.getResult() != Result.SUCCESS) {
+            status = JobStatus.failure.toString();
+        } else { // status is success
+            status = completed ? JobStatus.success.toString() : JobStatus.started.toString();
         }
 
+        result.put("status", status);
         result.put("timestamp", System.currentTimeMillis());
         result.put("syncId", Jenkins.getInstance().getDescriptorByType(DevOpsGlobalConfiguration.class).getSyncId());
         result.put("name", run.getDisplayName());

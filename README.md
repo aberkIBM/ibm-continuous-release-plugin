@@ -1,6 +1,6 @@
-# IBM Continuous Release
+Note: Must be built with Java 8.
 
-**Please go to https://wiki.jenkins-ci.org/display/JENKINS/IBM+Cloud+DevOps+Plugin for the latest instructions of this plugin**
+# IBM Continuous Release
 
 ---
 

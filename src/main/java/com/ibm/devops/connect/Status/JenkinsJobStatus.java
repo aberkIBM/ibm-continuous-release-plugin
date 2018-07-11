@@ -22,7 +22,7 @@ import hudson.FilePath;
 import hudson.model.Describable;
 import hudson.tasks.BuildStep;
 import hudson.model.AbstractBuild;
-import hudson.model.BuildListener;
+import hudson.model.Run;
 
 import java.io.File;
 
@@ -39,13 +39,13 @@ public class JenkinsJobStatus extends AbstractJenkinsStatus {
 
     public static final Logger log = LoggerFactory.getLogger(JenkinsJobStatus.class);
 
-    public JenkinsJobStatus(AbstractBuild build, CloudCause cloudCause, BuildStep buildStep, BuildListener buildListener, Boolean newStep, Boolean isFatal) {
-        this.run = build;
+    public JenkinsJobStatus(Run run, CloudCause cloudCause, BuildStep buildStep, TaskListener taskListener, Boolean newStep, Boolean isFatal) {
+        this.run = run;
         this.cloudCause = cloudCause;
         this.buildStep = buildStep;
         this.newStep = newStep;
         this.isFatal = isFatal;
-        this.taskListener = buildListener;
+        this.taskListener = taskListener;
         this.isPaused = false;
         this.isPipeline = false;
 
@@ -54,15 +54,19 @@ public class JenkinsJobStatus extends AbstractJenkinsStatus {
     }
 
     protected FilePath getWorkspaceFilePath() {
-        return ((AbstractBuild)run).getWorkspace();
+        // run.getBuild
+        if (run instanceof AbstractBuild) {
+            return ((AbstractBuild)run).getWorkspace();
+        }
+        return null;
     }
 
 
     protected void evaluateBuildStep() {
         if(!(buildStep instanceof hudson.model.ParametersDefinitionProperty)) {
-            if (newStep) {
+            if (newStep && buildStep != null) {
                 cloudCause.addStep(((Describable)buildStep).getDescriptor().getDisplayName(), JobStatus.started.toString(), "Started a build step", false);
-            } else {
+            } else if (buildStep != null) {
                 String newStatus;
                 String message;
                 if (!isFatal) {

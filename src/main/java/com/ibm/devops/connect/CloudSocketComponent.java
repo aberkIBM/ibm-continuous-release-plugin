@@ -26,6 +26,16 @@ import com.ibm.devops.connect.OnConnectListener;
 import com.ibm.devops.connect.CloudPublisher;
 
 import io.socket.client.Socket;
+import com.ibm.devops.connect.SecuredActions.BuildJobsList;
+
+import com.rabbitmq.client.ConnectionFactory;
+import com.rabbitmq.client.Connection;
+import com.rabbitmq.client.*;
+
+import java.io.IOException;
+import com.ibm.devops.connect.Endpoints.EndpointManager;
+
+import java.net.MalformedURLException;
 
 public class CloudSocketComponent {
 
@@ -63,52 +73,69 @@ public class CloudSocketComponent {
     	logPrefix= logPrefix + "connectToCloudServices ";
         String syncId = getSyncId();
         String syncToken = getSyncToken();
-        if (StringUtils.isBlank(syncId) || StringUtils.isBlank(syncToken)) {
-            log.info(logPrefix + "Not connecting to the cloud. IBM Bluemix DevOps Connect not registered yet.");
-            return;
-        }
 
         CloudPublisher cloudPublisher = new CloudPublisher();
 
         boolean shouldConnect = true;
-        // Does integration exist
-        if(!cloudPublisher.doesIntegrationExist()) {
-            // Does another integration exist
-            if(cloudPublisher.doesOtherIntegrationExist()) {
-                log.warn(logPrefix + "These credentials have been used by another Jenkins Instance.  Please generate another Sync Id and provide those credentials here.");
-                shouldConnect = false;
-                CloudSocketComponent.setOtherIntegrationsExists(true);
-            } else {
-                // Create Integration
-                cloudPublisher.createIntegration();
-            }
-        } else {
-                CloudSocketComponent.setOtherIntegrationsExists(false);
-        }
 
         if(shouldConnect) {
-            URI uri = new URI(cloudUrl);
-            log.info(logPrefix + "Starting cloud endpoint " + syncId);
-            socket = ConnectSocket.builder()
-                .uri(uri)
-                .id(syncId)
-                .token(syncToken)
-                .onConnect(Listeners.chain(Listeners.chain(Listeners.INFO_LOGGING, Listeners.EMIT_GET_WORK), OnConnectListener.BUILD_JOBS_LIST))
-                .onDisconnect(Listeners.INFO_LOGGING)
-                .onWorkAvailable(Listeners.chain(Listeners.DEBUG_LOGGING, Listeners.EMIT_GET_WORK))
-                .onWork(workListener)
-    //            .onWork(Listeners.chain(Listeners.INFO_LOGGING, workListener))
-                .onError(Listeners.ERROR_LOGGING)
-                .build();
-            socket.on(Socket.EVENT_CONNECT_ERROR, Listeners.ERROR_LOGGING);
-            socket.on(Socket.EVENT_CONNECT_TIMEOUT, Listeners.ERROR_LOGGING);
-            socket.on(Socket.EVENT_RECONNECT_ERROR, Listeners.ERROR_LOGGING);
-            socket.on(Socket.EVENT_RECONNECT_FAILED, Listeners.ERROR_LOGGING);
-            socket.on(Socket.EVENT_RECONNECT_ATTEMPT, Listeners.INFO_LOGGING);
-            // do not listen for Socket.EVENT_RECONNECT, we will make 2 get work requests
+            ConnectionFactory factory = new ConnectionFactory();
+            EndpointManager em = new EndpointManager();
 
-            socket.connect();
+            // Public Jenkins Client Credentials
+            factory.setUsername("jenkins");
+            factory.setPassword("jenkins");
+            String hostname = em.getVelocityHostname();
+            factory.setHost(hostname);
+            factory.setPort(5672);
+
+            Connection conn = factory.newConnection();
+
+            Channel channel = conn.createChannel();
+
+            log.info("Connecting to RabbitMQ");
+
+            String EXCHANGE_NAME = "jenkins";
+            String queueName = "jenkins.client." + syncId;
+
+            Consumer consumer = new DefaultConsumer(channel) {
+                @Override
+                public void handleDelivery(String consumerTag, Envelope envelope,
+                                            AMQP.BasicProperties properties, byte[] body) throws IOException {
+
+                    if (envelope.getRoutingKey().contains(".heartbeat")) {
+                        CloudPublisher cloudPublisher = new CloudPublisher();
+                        String syncId = getSyncId();
+                        String syncToken = getSyncToken();
+
+                        EndpointManager em = new EndpointManager();
+                        
+                        String url = removeTrailingSlash(Jenkins.getInstance().getDescriptorByType(DevOpsGlobalConfiguration.class).getBaseUrl());
+                        boolean connected = cloudPublisher.testConnection(syncId, syncToken, url);
+                    } else {
+                        String message = new String(body, "UTF-8");
+                        System.out.println(" [x] Received '" + message + "'");
+
+                        CloudWorkListener2 cloudWorkListener = new CloudWorkListener2();
+                        cloudWorkListener.call("startJob", message);
+                    }
+                }
+            };
+
+            channel.basicConsume(queueName, true, consumer);
+
+            log.info(logPrefix + "\n\n\tAbout to attempt building list...\n\n");
+
+            BuildJobsList buildJobList = new BuildJobsList();
+            buildJobList.runAsJenkinsUser(null);
         }
+    }
+
+    private String removeTrailingSlash(String url) {
+        if (url.endsWith("/")) {
+            url = url.substring(0, url.length() - 1);
+        }
+        return url;
     }
 
     // this does get called, but you may not see logging in the console. it will appear in the file.
